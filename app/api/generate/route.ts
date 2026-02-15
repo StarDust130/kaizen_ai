@@ -4,32 +4,38 @@ const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
 export async function POST(req: Request) {
   try {
-    const { topic, tone, audience, length, type, model } = await req.json();
+    const { topic, tone, audience, model } = await req.json();
 
-    const prompt = `
-    ACT AS: A world-class LinkedIn ghostwriter.
-    TASK: Write a ${type} about "${topic}".
-    TONE: ${tone}.
-    AUDIENCE: ${audience}.
-    LENGTH: ${length}.
-    
-    FORMATTING RULES:
-    1. Use short, punchy sentences.
-    2. Use line breaks between every thought.
-    3. No corporate jargon.
-    4. Start with a scroll-stopping hook.
-    5. End with a question.
-    `;
+    let systemPrompt = `You are a viral LinkedIn ghostwriter. 
+    RULES:
+    1. Start the post IMMEDIATELY with the hook. No titles (like "**Topic**"). No "As a...". No "Here is the post".
+    2. Do NOT use bold headlines like "**The Daily Grind**". Just start writing the content.
+    3. Use short, punchy paragraphs.`;
+
+    if (tone === "Super Chill 🤙") {
+      systemPrompt += `
+      TONE: SUPER CHILL & GEN Z.
+      - Use lowercase styling.
+      - Use emojis (🚀, 💀, 🔥).
+      - Use slang like "ngl", "fr", "lowkey".`;
+    } else {
+      systemPrompt += ` TONE: ${tone}.`;
+    }
 
     const completion = await groq.chat.completions.create({
       model: model || "llama-3.3-70b-versatile",
-      messages: [{ role: "user", content: prompt }],
-      temperature: 0.7,
-      max_tokens: 1024,
+      messages: [
+        { role: "system", content: systemPrompt },
+        {
+          role: "user",
+          content: `Topic: ${topic}\nTarget Audience: ${audience}`,
+        },
+      ],
+      temperature: 0.8,
     });
 
     return Response.json({ content: completion.choices[0].message.content });
   } catch (error) {
-    return Response.json({ error: "Generation failed" }, { status: 500 });
+    return Response.json({ error: "Failed to generate" }, { status: 500 });
   }
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Zap,
@@ -15,6 +15,10 @@ import {
   Github,
   Ban,
   ShieldAlert,
+  PenTool,
+  Eye,
+  Menu,
+  X,
 } from "lucide-react";
 import toast, { Toaster } from "react-hot-toast";
 
@@ -30,21 +34,21 @@ export default function KaizenAI() {
     model: "llama-3.3-70b-versatile",
   });
 
+  // 🚀 STATE
   const [hasStarted, setHasStarted] = useState(false);
+  const [activeTab, setActiveTab] = useState<"create" | "preview">("create");
 
-  // 🛡️ INTELLIGENT VALIDATION (No AI)
+  // 🛡️ VALIDATION
   const validateField = (text: string) => {
     const input = text.toLowerCase().trim();
-
-    // 1. Length Check
     if (input.length < 3) return "too_short";
 
-    // 2. Gibberish Guard (Allows "SaaS", "AI", but blocks "wowwo")
+    // Gibberish Guard
     const uniqueChars = new Set(input.replace(/[^a-z]/g, "")).size;
     if (input.length > 5 && uniqueChars < 3) return "gibberish";
-    if (/(.)\1{3,}/.test(input)) return "gibberish"; // Blocks "aaaaa"
+    if (/(.)\1{3,}/.test(input)) return "gibberish";
 
-    // 3. Strict Irrelevant Guard (Only block NON-LinkedIn stuff)
+    // Irrelevant Guard
     const forbiddenTriggers = [
       "ignore previous",
       "system prompt",
@@ -54,30 +58,21 @@ export default function KaizenAI() {
       "python",
       "javascript",
       "console.log",
-      "html css",
-      "recipe for",
-      "weather in",
-      "solve 2+",
+      "recipe",
+      "weather",
+      "solve",
       "calculate",
       "bomb",
-      "suicide",
-      "kill",
     ];
+    if (forbiddenTriggers.some((t) => input.includes(t))) return "irrelevant";
 
-    if (forbiddenTriggers.some((trigger) => input.includes(trigger))) {
-      return "irrelevant";
-    }
-
-    // 4. Profanity Guard
-    const badWords = ["fuck", "shit", "bitch", "asshole", "scam", "crap"];
-    if (badWords.some((word) => input.includes(word))) {
-      return "profanity";
-    }
+    const badWords = ["fuck", "shit", "bitch", "asshole", "scam"];
+    if (badWords.some((w) => input.includes(w))) return "profanity";
 
     return "safe";
   };
 
-  // 🧠 1. Typewriter Animation
+  // 🧠 Effects
   useEffect(() => {
     if (output && !loading) {
       let i = 0;
@@ -93,7 +88,6 @@ export default function KaizenAI() {
     }
   }, [output, loading]);
 
-  // 🧠 2. Smart Autocomplete
   useEffect(() => {
     const timer = setTimeout(async () => {
       if (
@@ -129,52 +123,16 @@ export default function KaizenAI() {
     if (!formData.audience.trim()) return toast.error("Who is this for?");
     if (!formData.topic.trim()) return toast.error("Please enter a topic.");
 
-    // Validate Topic
     const topicStatus = validateField(formData.topic);
-    if (topicStatus === "gibberish" || topicStatus === "too_short") {
-      toast("Please type a real topic (e.g., 'SaaS Growth').", {
-        icon: "🤔",
+    if (topicStatus !== "safe") {
+      toast("Invalid topic. Keep it professional.", {
         style: {
-          border: "2px solid #eab308",
-          color: "#f4f9f6",
+          border: "2px solid #000",
+          background: "#FDE047",
+          color: "#000",
           fontWeight: "bold",
         },
-      });
-      return;
-    }
-    if (topicStatus === "profanity") {
-      toast("Bad words are not allowed.", {
-        icon: <Ban className="text-red-500" />,
-        style: {
-          border: "2px solid #ef4444",
-          color: "#fbfdfc",
-          fontWeight: "bold",
-        },
-      });
-      return;
-    }
-    if (topicStatus === "irrelevant") {
-      toast("I only write LinkedIn posts. No code or recipes!", {
-        icon: <ShieldAlert className="text-yellow-500" />,
-        style: {
-          border: "2px solid #eab308",
-          color: "#f9f9f9",
-          fontWeight: "bold",
-        },
-      });
-      return;
-    }
-
-    // Validate Audience
-    const audienceStatus = validateField(formData.audience);
-    if (audienceStatus !== "safe") {
-      toast("Invalid Audience input.", {
-        icon: <ShieldAlert className="text-yellow-500" />,
-        style: {
-          border: "2px solid #eab308",
-          color: "#f1f6f3",
-          fontWeight: "bold",
-        },
+        icon: "🚧",
       });
       return;
     }
@@ -182,6 +140,10 @@ export default function KaizenAI() {
     setLoading(true);
     setHasStarted(true);
     setSuggestion("");
+
+    if (typeof window !== "undefined" && window.innerWidth < 1024) {
+      setActiveTab("preview");
+    }
 
     try {
       const res = await fetch("/api/generate", {
@@ -191,9 +153,10 @@ export default function KaizenAI() {
       });
       const data = await res.json();
       setOutput(data.content);
-      toast.success("Content Generated!");
+      toast.success("Generated!");
     } catch (err) {
-      toast.error("Generation Failed");
+      toast.error("Failed");
+      setActiveTab("create");
     } finally {
       setLoading(false);
     }
@@ -202,7 +165,7 @@ export default function KaizenAI() {
   const handleEdit = async (action: "shorten" | "refine" | "retry") => {
     if (!output) return;
     setLoading(true);
-    const toastId = toast.loading("AI is refining...");
+    const toastId = toast.loading("Refining...");
     try {
       const res = await fetch("/api/edit", {
         method: "POST",
@@ -217,95 +180,144 @@ export default function KaizenAI() {
       setOutput(data.content);
       toast.success("Updated!", { id: toastId });
     } catch (err) {
-      toast.error("Edit Failed", { id: toastId });
+      toast.error("Failed", { id: toastId });
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="h-screen bg-[#FDFCF8] text-[#1A2E22] font-sans selection:bg-[#4ADE80] selection:text-[#064E3B] flex flex-col font-medium overflow-hidden">
+    <div className="h-[100dvh] bg-[#F3F4F6] text-[#111827] font-sans flex flex-col font-medium selection:bg-[#BEF264] selection:text-black overflow-hidden">
       <Toaster
         position="top-center"
         toastOptions={{
           style: {
-            background: "#1A2E22",
+            background: "#111827",
             color: "#fff",
             border: "2px solid #000",
+            boxShadow: "4px 4px 0px #000",
           },
         }}
       />
 
+      {/* BACKGROUND DOTS */}
+      <div
+        className="absolute inset-0 z-0 opacity-[0.05]"
+        style={{
+          backgroundImage: "radial-gradient(#000 1px, transparent 1px)",
+          backgroundSize: "20px 20px",
+        }}
+      ></div>
+
       {/* HEADER */}
-      <nav className="shrink-0 border-b-2 border-[#1A2E22]/10 px-6 py-4 bg-[#FDFCF8] z-50">
+      <nav className="shrink-0 border-b-2 border-black px-6 py-4 bg-white z-50 relative">
         <div className="max-w-7xl mx-auto flex justify-between items-center">
           <div className="flex items-center gap-3">
-            <div className="bg-[#1A2E22] p-2 rounded-lg text-white shadow-[3px_3px_0px_#4ADE80] border-2 border-[#1A2E22]">
+            <div className="bg-black p-1.5 rounded-lg text-white shadow-[3px_3px_0px_#BEF264] border-2 border-black">
               <Zap size={20} fill="currentColor" />
             </div>
-            <h1 className="text-2xl font-black tracking-tighter text-[#1A2E22]">
-              KAIZEN<span className="text-[#15803d]">.AI</span>
+            <h1 className="text-2xl font-black tracking-tighter italic">
+              KAIZEN<span className="text-[#65A30D]">.AI</span>
             </h1>
           </div>
-          <div className="flex gap-3 text-[10px] font-black uppercase tracking-widest">
-            <a
-              href="https://github.com/StarDust130/kaizen_ai"
-              target="_blank"
-              rel="noreferrer"
-              className="flex items-center gap-2 px-4 py-2 bg-[#1A2E22] text-white rounded-lg border-2 border-[#1A2E22] shadow-[3px_3px_0px_#4ADE80] hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-none transition-all cursor-pointer"
-            >
-              <Github size={14} />
-              <span>GitHub</span>
-            </a>
-          </div>
+          <a
+            href="https://github.com/StarDust130/kaizen_ai"
+            target="_blank"
+            rel="noreferrer"
+            className="flex items-center gap-2 px-4 py-2 bg-white border-2 border-black rounded-lg shadow-[3px_3px_0px_#000] hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-none transition-all font-bold text-xs uppercase tracking-widest cursor-pointer"
+          >
+            <Github size={16} />
+            <span className="hidden sm:inline">GitHub</span>
+          </a>
         </div>
       </nav>
 
+      {/* 📱 MOBILE TABS */}
+      <AnimatePresence>
+        {hasStarted && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            className="lg:hidden px-4 pt-4 shrink-0 z-20 relative"
+          >
+            <div className="flex bg-white p-1 rounded-xl border-2 border-black shadow-[4px_4px_0px_rgba(0,0,0,0.1)]">
+              <button
+                onClick={() => setActiveTab("create")}
+                className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-xs font-black uppercase transition-all ${activeTab === "create" ? "bg-black text-white" : "text-gray-400 hover:text-black"}`}
+              >
+                <PenTool size={14} /> Create
+              </button>
+              <button
+                onClick={() => setActiveTab("preview")}
+                className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-xs font-black uppercase transition-all ${activeTab === "preview" ? "bg-black text-white" : "text-gray-400 hover:text-black"}`}
+              >
+                <Eye size={14} /> Preview
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* MAIN CONTENT AREA */}
-      <main
-        className={`flex-1 w-full p-4 lg:p-6 transition-all duration-700 ease-[cubic-bezier(0.25,0.8,0.25,1)] ${
-          hasStarted
-            ? "max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8 overflow-hidden"
-            : "flex items-center justify-center"
-        }`}
-      >
-        {/* 👈 LEFT: CONFIGURATION */}
+      <main className="flex-1 w-full max-w-7xl mx-auto p-4 lg:p-8 flex items-center justify-center relative z-10 h-full overflow-hidden">
+        {/* CONTAINER GRID */}
         <motion.div
           layout
-          transition={{ type: "spring", stiffness: 350, damping: 30 }}
-          className={`bg-white rounded-[2rem] border-2 border-[#1A2E22] shadow-[6px_6px_0px_#1A2E22] flex flex-col overflow-hidden ${
-            hasStarted ? "h-full" : "w-full max-w-2xl max-h-[85vh]"
-          }`}
+          transition={{ type: "spring", stiffness: 300, damping: 30 }}
+          className={`
+            w-full grid gap-6 h-full items-start transition-all duration-500
+            ${hasStarted ? "grid-cols-1 lg:grid-cols-12" : "grid-cols-1 place-items-center"}
+          `}
         >
-          <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
-            <div>
-              <h2 className="text-lg font-black text-[#1A2E22] tracking-tight">
-                Post Configuration ✌️
-              </h2>
-            </div>
+          {/* 👈 LEFT: INPUT CARD */}
+          <motion.div
+            layout
+            className={`
+              bg-white border-2 border-black shadow-[6px_6px_0px_#000] rounded-2xl flex flex-col overflow-hidden
+              ${activeTab === "create" ? "flex" : "hidden lg:flex"}
+              ${hasStarted ? "lg:col-span-5 h-full" : "w-full max-w-xl h-auto max-h-[85vh]"} 
+            `}
+          >
+            <div className="flex-1 flex flex-col p-6 gap-5 overflow-y-auto custom-scrollbar">
+              {/* Header inside card */}
+              <div className="flex justify-between items-center border-b-2 border-gray-100 pb-4 shrink-0">
+                <div>
+                  <h2 className="text-xl font-black italic tracking-tighter">
+                    CREATE POST
+                  </h2>
+                  {!hasStarted && (
+                    <p className="text-xs text-gray-500 font-bold mt-1">
+                      Let's go viral today.
+                    </p>
+                  )}
+                </div>
+                <div className="w-3 h-3 rounded-full bg-[#BEF264] border-2 border-black" />
+              </div>
 
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <label className="text-xs font-black uppercase tracking-wider text-[#1A2E22]">
+              {/* Form Inputs */}
+              <div className="space-y-1.5 shrink-0">
+                <label className="text-[11px] font-black uppercase tracking-wider text-gray-600">
                   Target Audience
                 </label>
                 <input
-                  placeholder="Ex: SaaS Founders..."
-                  className="w-full bg-[#F3F4F1] border-2 border-[#1A2E22] rounded-xl px-4 py-3 outline-none focus:bg-white focus:shadow-[4px_4px_0px_#4ADE80] transition-all font-bold placeholder:text-[#1A2E22]/30"
+                  placeholder="Ex: SaaS Founders, Developers..."
+                  className="w-full bg-[#F9FAFB] border-2 border-gray-200 rounded-xl px-4 py-3 outline-none focus:border-black focus:shadow-[4px_4px_0px_#BEF264] transition-all font-bold placeholder:text-gray-300 text-sm"
                   onChange={(e) =>
                     setFormData({ ...formData, audience: e.target.value })
                   }
                 />
               </div>
 
-              <div className="space-y-2 relative group flex-1">
-                <label className="text-xs font-black uppercase tracking-wider text-[#1A2E22]">
-                  Topic / Core Message
+              <div className="flex flex-col flex-1 space-y-1.5 min-h-[160px] relative group">
+                <label className="text-[11px] font-black uppercase tracking-wider text-gray-600">
+                  Topic / Core Idea
                 </label>
-                <div className="relative bg-[#F3F4F1] rounded-xl border-2 border-[#1A2E22] focus-within:bg-white focus-within:shadow-[4px_4px_0px_#4ADE80] transition-all min-h-[180px]">
-                  <div className="absolute top-4 left-4 pointer-events-none whitespace-pre-wrap font-bold text-[#1A2E22]/30 z-0 text-base leading-relaxed">
+                <div className="flex-1 relative bg-[#F9FAFB] border-2 border-gray-200 rounded-xl focus-within:border-black focus-within:shadow-[4px_4px_0px_#BEF264] transition-all flex flex-col">
+                  <div className="absolute top-4 left-4 pointer-events-none whitespace-pre-wrap font-bold text-gray-300 z-0 text-sm leading-relaxed p-0.5">
                     <span className="opacity-0">{formData.topic}</span>
-                    <span className="text-[#1A2E22]/40">{suggestion}</span>
+                    <span className="text-gray-400 opacity-50">
+                      {suggestion}
+                    </span>
                   </div>
                   <textarea
                     value={formData.topic}
@@ -313,25 +325,26 @@ export default function KaizenAI() {
                     onChange={(e) =>
                       setFormData({ ...formData, topic: e.target.value })
                     }
-                    className="w-full h-full bg-transparent p-4 outline-none relative z-10 resize-none font-bold text-[#1A2E22] text-base leading-relaxed placeholder:text-transparent"
+                    className="flex-1 w-full bg-transparent p-4 outline-none relative z-10 resize-none font-bold text-[#111827] text-sm leading-relaxed placeholder:text-transparent"
                     placeholder="Start typing..."
                   />
                   {suggestion && (
-                    <div className="absolute bottom-3 right-3 text-[9px] font-black text-[#1A2E22] bg-[#4ADE80] border-2 border-[#1A2E22] px-2 py-1 rounded animate-pulse">
+                    <div className="absolute bottom-3 right-3 text-[9px] font-black text-white bg-black px-2 py-1 rounded animate-pulse">
                       TAB
                     </div>
                   )}
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-xs font-black uppercase tracking-wider text-[#1A2E22]">
+              {/* Selects */}
+              <div className="shrink-0 grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-black uppercase tracking-wider text-gray-600">
                     Tone
                   </label>
                   <div className="relative">
                     <select
-                      className="w-full appearance-none bg-white border-2 border-[#1A2E22] rounded-xl px-4 py-3 outline-none focus:shadow-[4px_4px_0px_#4ADE80] font-bold cursor-pointer transition-all text-sm"
+                      className="w-full bg-white border-2 border-gray-200 rounded-xl px-3 py-2.5 outline-none focus:border-black focus:shadow-[2px_2px_0px_#BEF264] font-bold text-xs appearance-none cursor-pointer"
                       onChange={(e) =>
                         setFormData({ ...formData, tone: e.target.value })
                       }
@@ -343,168 +356,167 @@ export default function KaizenAI() {
                       <option>Super Chill 🤙</option>
                     </select>
                     <ChevronDown
-                      className="absolute right-4 top-1/2 -translate-y-1/2 text-[#1A2E22] pointer-events-none stroke-[3px]"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
                       size={14}
+                      strokeWidth={3}
                     />
                   </div>
                 </div>
-                <div className="space-y-2">
-                  <label className="text-xs font-black uppercase tracking-wider text-[#1A2E22]">
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-black uppercase tracking-wider text-gray-600">
                     Model
                   </label>
                   <div className="relative">
                     <select
-                      className="w-full appearance-none bg-white border-2 border-[#1A2E22] rounded-xl px-4 py-3 outline-none focus:shadow-[4px_4px_0px_#4ADE80] font-bold cursor-pointer transition-all text-sm"
+                      className="w-full bg-white border-2 border-gray-200 rounded-xl px-3 py-2.5 outline-none focus:border-black focus:shadow-[2px_2px_0px_#BEF264] font-bold text-xs appearance-none cursor-pointer"
                       onChange={(e) =>
                         setFormData({ ...formData, model: e.target.value })
                       }
                     >
                       <option value="llama-3.3-70b-versatile">Llama 3.3</option>
                       <option value="llama-3.1-8b-instant">Llama 3.1</option>
-                      <option value="mixtral-8x7b-32768">Mixtral 8x7B</option>
-                      <option value="gemma2-9b-it">Gemma 2 (9B)</option>
+                      <option value="mixtral-8x7b-32768">Mixtral</option>
                     </select>
                     <ChevronDown
-                      className="absolute right-4 top-1/2 -translate-y-1/2 text-[#1A2E22] pointer-events-none stroke-[3px]"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
                       size={14}
+                      strokeWidth={3}
                     />
                   </div>
                 </div>
               </div>
             </div>
-          </div>
 
-          <div className="p-6 pt-4 bg-white border-t-2 border-[#1A2E22]/5">
-            <button
-              onClick={handleGenerate}
-              disabled={loading}
-              className="w-full py-4 bg-[#1A2E22] text-white text-lg rounded-xl font-black uppercase tracking-wide border-2 border-[#1A2E22] shadow-[4px_4px_0px_#4ADE80] hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0px_#4ADE80] active:translate-x-[4px] active:translate-y-[4px] active:shadow-none transition-all flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
-            >
-              {loading ? (
-                <RefreshCcw className="animate-spin" />
-              ) : (
-                <>
-                  <Sparkles
-                    size={18}
-                    fill="#4ADE80"
-                    className="text-[#4ADE80]"
-                  />{" "}
-                  GENERATE
-                </>
-              )}
-            </button>
-          </div>
-        </motion.div>
+            {/* GENERATE BUTTON */}
+            <div className="p-6 bg-white border-t-2 border-black shrink-0">
+              <button
+                onClick={handleGenerate}
+                disabled={loading}
+                className="w-full py-3.5 bg-black text-white border-2 border-black text-sm rounded-xl font-black uppercase tracking-wide shadow-[4px_4px_0px_#BEF264] hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-none hover:bg-[#222] active:translate-x-[4px] active:translate-y-[4px] transition-all flex items-center justify-center gap-3 disabled:opacity-70 disabled:cursor-not-allowed group"
+              >
+                {loading ? (
+                  <RefreshCcw className="animate-spin" size={18} />
+                ) : (
+                  <>
+                    <Sparkles
+                      size={18}
+                      className="text-[#BEF264] group-hover:animate-pulse"
+                    />{" "}
+                    GENERATE
+                  </>
+                )}
+              </button>
+            </div>
+          </motion.div>
 
-        {/* 👉 RIGHT: PREVIEW CARD */}
-        <AnimatePresence>
-          {hasStarted && (
-            <motion.div
-              initial={{ opacity: 0, x: 60 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 60 }}
-              transition={{ delay: 0.2, duration: 0.5, type: "spring" }}
-              className="h-full bg-white rounded-[2rem] border-2 border-[#1A2E22] shadow-[6px_6px_0px_#1A2E22] flex flex-col overflow-hidden relative"
-            >
-              <div className="shrink-0 px-6 py-4 border-b-2 border-[#1A2E22]/10 bg-[#FDFCF8] flex flex-col gap-4">
-                <div className="flex justify-between items-center">
-                  <span className="text-[10px] font-black uppercase tracking-wider text-[#1A2E22] flex items-center gap-2">
-                    <div className="w-2 h-2 rounded-full bg-[#4ADE80] border border-[#1A2E22] animate-pulse" />{" "}
-                    Output Canvas
-                  </span>
+          {/* 👉 RIGHT: PREVIEW CARD (Visible after Generate) */}
+          <AnimatePresence>
+            {hasStarted && (
+              <motion.div
+                initial={{ opacity: 0, x: 50 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 50 }}
+                transition={{ delay: 0.1, duration: 0.4 }}
+                className={`
+                  bg-white rounded-2xl border-2 border-black shadow-[6px_6px_0px_#000] flex-col overflow-hidden relative h-full
+                  ${activeTab === "preview" ? "flex" : "hidden lg:flex"}
+                  lg:col-span-7
+                `}
+              >
+                {/* Toolbar */}
+                <div className="shrink-0 px-6 py-4 border-b-2 border-black bg-gray-50 flex flex-col gap-3">
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <h2 className="text-xl font-black italic tracking-tighter">
+                        OUTPUT
+                      </h2>
+                      <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest flex items-center gap-2">
+                        <div
+                          className={`w-2 h-2 rounded-full border border-black ${loading ? "bg-yellow-400 animate-pulse" : "bg-[#BEF264]"}`}
+                        />
+                        {loading ? "Thinking..." : "Ready"}
+                      </span>
+                    </div>
+                    {output && !loading && (
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => {
+                            navigator.clipboard.writeText(output);
+                            toast.success("Copied!");
+                          }}
+                          className="p-2 bg-white border-2 border-black rounded-lg shadow-[2px_2px_0px_#000] hover:shadow-none hover:translate-x-[1px] hover:translate-y-[1px] transition-all text-black"
+                        >
+                          <Copy size={16} strokeWidth={3} />
+                        </button>
+                        <button
+                          onClick={() =>
+                            window.open(
+                              `https://www.linkedin.com/feed/?shareActive=true&text=${encodeURIComponent(output)}`,
+                              "_blank",
+                            )
+                          }
+                          className="flex items-center gap-2 px-4 py-2 text-xs font-black uppercase bg-[#0077B5] text-white border-2 border-black rounded-lg shadow-[2px_2px_0px_#000] hover:shadow-none hover:translate-x-[1px] hover:translate-y-[1px] transition-all"
+                        >
+                          <Linkedin size={16} strokeWidth={3} /> POST
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
                   {output && !loading && (
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => {
-                          navigator.clipboard.writeText(output);
-                          toast.success("Copied!");
-                        }}
-                        className="p-2 bg-white border-2 border-[#1A2E22] rounded-lg shadow-[2px_2px_0px_#1A2E22] hover:shadow-none transition-all text-[#1A2E22]"
-                      >
-                        <Copy size={14} strokeWidth={3} />
-                      </button>
-                      <button
-                        onClick={() =>
-                          window.open(
-                            `https://www.linkedin.com/feed/?shareActive=true&text=${encodeURIComponent(
-                              output,
-                            )}`,
-                            "_blank",
-                          )
-                        }
-                        className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-black uppercase bg-[#0077B5] text-white border-2 border-[#1A2E22] rounded-lg shadow-[2px_2px_0px_#1A2E22] hover:shadow-none transition-all"
-                      >
-                        <Linkedin size={14} strokeWidth={3} /> POST
-                      </button>
+                    <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
+                      {["Shorten", "Refine", "Retry"].map((action) => (
+                        <button
+                          key={action}
+                          onClick={() =>
+                            handleEdit(action.toLowerCase() as any)
+                          }
+                          className="flex-1 py-1.5 px-4 bg-white border-2 border-black rounded-lg text-[10px] font-black uppercase text-black hover:bg-[#ecfccb] transition-all whitespace-nowrap shadow-[2px_2px_0px_#000] active:shadow-none active:translate-y-[1px]"
+                        >
+                          {action}
+                        </button>
+                      ))}
                     </div>
                   )}
                 </div>
 
-                {/* EDIT TOOLS */}
-                {output && !loading && (
-                  <motion.div
-                    initial={{ opacity: 0, y: -10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="flex gap-2"
-                  >
-                    <button
-                      onClick={() => handleEdit("shorten")}
-                      className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-white border-2 border-[#1A2E22] rounded-lg text-[10px] font-black uppercase text-[#1A2E22] hover:bg-[#F3F4F1] transition-all"
-                    >
-                      <Scissors size={12} strokeWidth={3} /> Shorten
-                    </button>
-                    <button
-                      onClick={() => handleEdit("refine")}
-                      className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-white border-2 border-[#1A2E22] rounded-lg text-[10px] font-black uppercase text-[#1A2E22] hover:bg-[#F3F4F1] transition-all"
-                    >
-                      <Wand2 size={12} strokeWidth={3} /> Refine
-                    </button>
-                    <button
-                      onClick={() => handleEdit("retry")}
-                      className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-white border-2 border-[#1A2E22] rounded-lg text-[10px] font-black uppercase text-[#1A2E22] hover:bg-[#F3F4F1] transition-all"
-                    >
-                      <RefreshCcw size={12} strokeWidth={3} /> Retry
-                    </button>
-                  </motion.div>
-                )}
-              </div>
-
-              {/* CONTENT AREA */}
-              <div className="flex-1 overflow-y-auto p-8 bg-white custom-scrollbar relative">
-                <AnimatePresence mode="wait">
-                  {loading ? (
-                    <div className="space-y-4 max-w-lg mx-auto pt-10 opacity-50">
-                      <div className="h-4 bg-[#1A2E22]/10 rounded-full w-full animate-pulse" />
-                      <div className="h-4 bg-[#1A2E22]/10 rounded-full w-5/6 animate-pulse" />
-                      <div className="h-4 bg-[#1A2E22]/10 rounded-full w-4/6 animate-pulse" />
-                      <div className="flex justify-center pt-4">
-                        <span className="text-xs font-black text-[#1A2E22] animate-bounce tracking-widest uppercase">
-                          AI IS THINKING...
-                        </span>
+                {/* Content */}
+                <div className="flex-1 overflow-y-auto p-6 md:p-8 bg-white custom-scrollbar">
+                  <AnimatePresence mode="wait">
+                    {loading ? (
+                      <div className="space-y-4 pt-8 opacity-50 max-w-xl mx-auto">
+                        <div className="h-4 bg-gray-200 rounded w-full animate-pulse" />
+                        <div className="h-4 bg-gray-200 rounded w-5/6 animate-pulse" />
+                        <div className="h-4 bg-gray-200 rounded w-4/6 animate-pulse" />
+                        <div className="flex justify-center pt-6">
+                          <span className="text-[10px] font-black bg-black text-white px-3 py-1 rounded-full animate-bounce">
+                            COOKING...
+                          </span>
+                        </div>
                       </div>
-                    </div>
-                  ) : output ? (
-                    <div className="prose prose-lg max-w-none">
-                      <p className="whitespace-pre-wrap text-[#1A2E22] text-lg leading-loose font-semibold">
-                        {streamedText}
-                        <span className="inline-block w-2 h-5 bg-[#4ADE80] ml-1 animate-pulse align-middle" />
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="h-full flex flex-col items-center justify-center text-center opacity-30 space-y-4">
-                      <div className="w-20 h-20 bg-[#F3F4F1] rounded-full flex items-center justify-center border-2 border-dashed border-[#1A2E22]">
-                        <Send size={32} className="text-[#1A2E22] ml-1 mt-1" />
+                    ) : output ? (
+                      <div className="prose prose-lg max-w-none">
+                        <p className="whitespace-pre-wrap text-[#111827] text-[17px] leading-8 font-medium font-sans">
+                          {streamedText}
+                          <span className="inline-block w-2 h-5 bg-[#BEF264] border border-black ml-1 animate-pulse align-middle" />
+                        </p>
                       </div>
-                      <p className="text-xs font-black uppercase tracking-widest text-[#1A2E22]">
-                        Ready to Create
-                      </p>
-                    </div>
-                  )}
-                </AnimatePresence>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+                    ) : (
+                      <div className="h-full flex flex-col items-center justify-center text-center opacity-40 gap-4">
+                        <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center border-2 border-dashed border-gray-400">
+                          <Send size={32} className="text-gray-400" />
+                        </div>
+                        <p className="text-xs font-black uppercase tracking-widest text-gray-400">
+                          Waiting for input...
+                        </p>
+                      </div>
+                    )}
+                  </AnimatePresence>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </motion.div>
       </main>
     </div>
   );

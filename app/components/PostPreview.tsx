@@ -110,25 +110,75 @@ export default function PostPreview({
     window.getSelection()?.removeAllRanges();
   }, []);
 
-  // React event handler — no ref lifecycle issues
+  // Ref to track if edit bar is open (avoids stale closure in selectionchange)
+  const showEditBarRef = useRef(false);
+  useEffect(() => {
+    showEditBarRef.current = showEditBar;
+  }, [showEditBar]);
+
+  // Track if the user is interacting with the edit bar input (prevent dismiss)
+  const editBarTouchedRef = useRef(false);
+
+  // Check current selection and show/dismiss edit bar
+  const processSelection = useCallback(() => {
+    if (loading || isStreaming) return;
+    // Don't dismiss if user is interacting with the edit bar
+    if (editBarTouchedRef.current) return;
+    const selection = window.getSelection();
+    const text =
+      selection && !selection.isCollapsed ? selection.toString().trim() : "";
+    if (text.length >= 3) {
+      setSelectedText(text);
+      setEditInstruction("");
+      setEditError("");
+      setShowEditBar(true);
+      // Clear the native browser selection so Android stops showing
+      // the Google "Tap to see search results" smart selection bar.
+      // We already captured the text into state, so we don't need it.
+      requestAnimationFrame(() => {
+        window.getSelection()?.removeAllRanges();
+        // Auto-focus on desktop only
+        if (window.matchMedia("(pointer: fine)").matches) {
+          editInputRef.current?.focus();
+        }
+      });
+    } else if (showEditBarRef.current) {
+      dismissEditBar();
+    }
+  }, [loading, isStreaming, dismissEditBar]);
+
+  // Use selectionchange event — works reliably on mobile
+  const contentRef = useRef<HTMLDivElement>(null);
+  const selectionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    const handleSelectionChange = () => {
+      // Debounce: wait until the user stops adjusting the selection handles
+      // before processing. This prevents clearing the selection too early
+      // while the user is still dragging.
+      if (selectionTimerRef.current) clearTimeout(selectionTimerRef.current);
+      selectionTimerRef.current = setTimeout(() => {
+        const sel = window.getSelection();
+        if (
+          sel &&
+          sel.rangeCount > 0 &&
+          contentRef.current?.contains(sel.anchorNode)
+        ) {
+          processSelection();
+        }
+      }, 300);
+    };
+    document.addEventListener("selectionchange", handleSelectionChange);
+    return () => {
+      document.removeEventListener("selectionchange", handleSelectionChange);
+      if (selectionTimerRef.current) clearTimeout(selectionTimerRef.current);
+    };
+  }, [processSelection]);
+
+  // React event handler as fallback for desktop
   const handleTextSelection = useCallback(() => {
     if (loading || isStreaming) return;
-    setTimeout(() => {
-      const selection = window.getSelection();
-      const text =
-        selection && !selection.isCollapsed ? selection.toString().trim() : "";
-      if (text.length >= 3) {
-        setSelectedText(text);
-        setEditInstruction("");
-        setEditError("");
-        setShowEditBar(true);
-        requestAnimationFrame(() => editInputRef.current?.focus());
-      } else if (showEditBar) {
-        // Clicked without selecting text — dismiss edit bar
-        dismissEditBar();
-      }
-    }, 10);
-  }, [loading, isStreaming, showEditBar, dismissEditBar]);
+    setTimeout(() => processSelection(), 10);
+  }, [loading, isStreaming, processSelection]);
 
   // Close edit bar when output changes
   useEffect(() => {
@@ -151,6 +201,24 @@ export default function PostPreview({
       return "Please enter a genuine editing instruction";
     return "";
   }, []);
+
+  // Render text with highlight on the selected portion
+  const highlightedText = useMemo(() => {
+    if (!showEditBar || !selectedText || !streamedText) return null;
+    const idx = streamedText.indexOf(selectedText);
+    if (idx === -1) return null;
+    const before = streamedText.slice(0, idx);
+    const after = streamedText.slice(idx + selectedText.length);
+    return (
+      <>
+        {before}
+        <mark className="bg-[#BEF264]/40 text-inherit rounded-sm box-decoration-clone px-0.5 -mx-0.5 transition-colors duration-300">
+          {selectedText}
+        </mark>
+        {after}
+      </>
+    );
+  }, [showEditBar, selectedText, streamedText]);
 
   const handleEditSubmit = useCallback(() => {
     const error = validateEditInstruction(editInstruction);
@@ -326,17 +394,29 @@ export default function PostPreview({
         <AnimatePresence mode="wait">
           {output || loading ? (
             <motion.div
+              ref={contentRef}
               key="output"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ duration: 0.2 }}
               className="prose prose-lg max-w-none"
               onMouseUp={handleTextSelection}
-              onTouchEnd={handleTextSelection}
+              onContextMenu={(e) => {
+                // Prevent browser context menu ("Search Google" etc.) on mobile
+                // so our custom edit bar can appear instead
+                const sel = window.getSelection();
+                if (
+                  sel &&
+                  !sel.isCollapsed &&
+                  sel.toString().trim().length >= 3
+                ) {
+                  e.preventDefault();
+                }
+              }}
             >
               {/* Text content — just rendered cleanly with a cursor */}
               <p className="whitespace-pre-wrap text-[#111827] text-[15px] sm:text-[16px] leading-[1.85] font-medium font-sans selection:bg-[#BEF264]/40 selection:text-black">
-                {streamedText}
+                {highlightedText ?? streamedText}
                 {/* Cursor */}
                 {isGenerating && (
                   <motion.span
@@ -422,6 +502,15 @@ export default function PostPreview({
               exit={{ opacity: 0, y: 20, scale: 0.95 }}
               transition={{ type: "spring", stiffness: 400, damping: 30 }}
               className="sticky bottom-0 left-0 right-0 mt-4 bg-white border-[3px] border-black rounded-2xl shadow-[4px_4px_0px_#000] overflow-hidden z-20"
+              onTouchStart={() => {
+                editBarTouchedRef.current = true;
+              }}
+              onTouchEnd={() => {
+                setTimeout(() => {
+                  editBarTouchedRef.current = false;
+                }, 300);
+              }}
+              onClick={(e) => e.stopPropagation()}
             >
               <div className="px-4 pt-3 pb-2">
                 <div className="flex items-center justify-between mb-2">
@@ -449,6 +538,13 @@ export default function PostPreview({
                     <input
                       ref={editInputRef}
                       type="text"
+                      inputMode="text"
+                      autoComplete="off"
+                      autoCorrect="off"
+                      autoCapitalize="sentences"
+                      spellCheck={false}
+                      enterKeyHint="send"
+                      data-form-type="other"
                       value={editInstruction}
                       onChange={(e) => {
                         setEditInstruction(e.target.value);
@@ -468,6 +564,7 @@ export default function PostPreview({
                         }
                         if (e.key === "Escape") dismissEditBar();
                       }}
+                      onTouchStart={(e) => e.stopPropagation()}
                       placeholder="Make this more engaging..."
                       maxLength={200}
                       className={`w-full bg-[#FAFAF9] border-[3px] rounded-xl px-3 py-2.5 outline-none transition-all font-bold text-xs placeholder:text-gray-300 ${

@@ -60,16 +60,19 @@ export default function PostForm({
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [topicFocused, setTopicFocused] = useState(false);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
+  const advancedRef = useRef<HTMLDivElement>(null);
 
-  // Auto-scroll to bottom when advanced options opens so Generate button context is visible
+  // Auto-scroll to bottom when advanced options opens so the card is visible
   useEffect(() => {
-    if (showAdvanced && scrollAreaRef.current) {
-      requestAnimationFrame(() => {
-        scrollAreaRef.current?.scrollTo({
-          top: scrollAreaRef.current.scrollHeight,
+    if (showAdvanced && advancedRef.current) {
+      // Wait for Framer Motion height animation (250ms) to finish before scrolling
+      const timeout = setTimeout(() => {
+        advancedRef.current?.scrollIntoView({
           behavior: "smooth",
+          block: "end",
         });
-      });
+      }, 280);
+      return () => clearTimeout(timeout);
     }
   }, [showAdvanced]);
 
@@ -343,7 +346,7 @@ export default function PostForm({
             >
               {/* Ghost suggestion overlay — only when focused */}
               {topicFocused && suggestion && (
-                <div className="absolute top-4 left-4 pointer-events-none whitespace-pre-wrap font-bold text-gray-300 z-0 text-sm leading-relaxed p-0.5">
+                <div className="absolute top-0 left-0 p-4 pointer-events-none whitespace-pre-wrap font-bold text-gray-300 z-0 text-sm leading-relaxed">
                   <span className="opacity-0">{formData.topic}</span>
                   <span className="text-gray-400/50">{suggestion}</span>
                 </div>
@@ -484,6 +487,7 @@ export default function PostForm({
 
           {/* Advanced Options Toggle */}
           <motion.div
+            ref={advancedRef}
             className="shrink-0"
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}

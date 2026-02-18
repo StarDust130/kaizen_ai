@@ -346,7 +346,7 @@ export default function PostForm({
             >
               {/* Ghost suggestion overlay — only when focused */}
               {topicFocused && suggestion && (
-                <div className="absolute top-0 left-0 p-4 pointer-events-none whitespace-pre-wrap font-bold text-gray-300 z-0 text-sm leading-relaxed">
+                <div className="absolute top-0 left-0 p-4 pointer-events-none whitespace-pre-wrap font-bold text-gray-800 z-0 text-sm leading-relaxed">
                   <span className="opacity-0">{formData.topic}</span>
                   <span className="text-gray-400/50">{suggestion}</span>
                 </div>
@@ -507,7 +507,7 @@ export default function PostForm({
                 <ChevronDown size={12} strokeWidth={3} />
               </motion.div>
               {!showAdvanced && (
-                <span className="text-[9px] font-bold text-gray-300 normal-case tracking-normal ml-auto">
+                <span className="text-[9px] font-bold text-gray-800 normal-case tracking-normal ml-auto">
                   Hook · Length · Model
                 </span>
               )}

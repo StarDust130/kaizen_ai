@@ -66,14 +66,11 @@ export default function PostHistory({
       .split(/\s+/)
       .filter((w) => w.length > 0).length;
 
-  const handleCopy = useCallback(
-    (e: React.MouseEvent, content: string) => {
-      e.stopPropagation();
-      navigator.clipboard.writeText(content);
-      toast.success("Copied to clipboard!");
-    },
-    [],
-  );
+  const handleCopy = useCallback((e: React.MouseEvent, content: string) => {
+    e.stopPropagation();
+    navigator.clipboard.writeText(content);
+    toast.success("Copied to clipboard!");
+  }, []);
 
   const handleDelete = useCallback(
     (e: React.MouseEvent, id: string) => {
@@ -161,7 +158,8 @@ export default function PostHistory({
                       POST HISTORY
                     </h3>
                     <p className="text-[9px] font-bold text-gray-400 mt-0.5">
-                      {history.length} generated post{history.length !== 1 ? "s" : ""}
+                      {history.length} generated post
+                      {history.length !== 1 ? "s" : ""}
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
@@ -211,7 +209,7 @@ export default function PostHistory({
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder="Search posts..."
-                    className="w-full bg-white border-2 border-gray-200 rounded-xl px-3 py-2 text-xs font-bold placeholder:text-gray-300 focus:border-black focus:outline-none transition-colors"
+                    className="w-full bg-white border-2 border-gray-200 rounded-xl px-3 py-2 text-xs font-bold placeholder:text-gray-800 focus:border-black focus:outline-none transition-colors"
                   />
                 )}
               </div>
@@ -231,7 +229,9 @@ export default function PostHistory({
                         scale: deletingId === item.id ? 0.9 : 1,
                       }}
                       exit={{ opacity: 0, x: 80, scale: 0.9 }}
-                      transition={{ delay: deletingId === item.id ? 0 : i * 0.03 }}
+                      transition={{
+                        delay: deletingId === item.id ? 0 : i * 0.03,
+                      }}
                       className="relative group"
                     >
                       <button
@@ -248,7 +248,7 @@ export default function PostHistory({
                           </p>
                           <ChevronRight
                             size={14}
-                            className="text-gray-300 group-hover:text-black transition-colors mt-0.5 shrink-0"
+                            className="text-gray-800 group-hover:text-black transition-colors mt-0.5 shrink-0"
                           />
                         </div>
 
@@ -308,7 +308,7 @@ export default function PostHistory({
 
                 {filteredHistory.length === 0 && searchQuery && (
                   <div className="text-center py-8">
-                    <p className="text-[10px] font-bold text-gray-300 uppercase tracking-widest">
+                    <p className="text-[10px] font-bold text-gray-800 uppercase tracking-widest">
                       No matches found
                     </p>
                   </div>

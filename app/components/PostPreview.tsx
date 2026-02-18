@@ -451,7 +451,7 @@ export default function PostPreview({
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
                       transition={{ delay: 0.7 }}
-                      className="text-[9px] font-bold text-gray-300 uppercase tracking-widest flex items-center gap-1.5 shrink-0"
+                      className="text-[9px] font-bold text-gray-800 uppercase tracking-widest flex items-center gap-1.5 shrink-0"
                     >
                       <Pencil size={9} />
                       Select text to edit with AI
@@ -567,7 +567,7 @@ export default function PostPreview({
                       onTouchStart={(e) => e.stopPropagation()}
                       placeholder="Make this more engaging..."
                       maxLength={200}
-                      className={`w-full bg-[#FAFAF9] border-[3px] rounded-xl px-3 py-2.5 outline-none transition-all font-bold text-xs placeholder:text-gray-300 ${
+                      className={`w-full bg-[#FAFAF9] border-[3px] rounded-xl px-3 py-2.5 outline-none transition-all font-bold text-xs placeholder:text-gray-800 ${
                         editError
                           ? "border-red-300 focus:border-red-500 focus:shadow-[2px_2px_0px_#FCA5A5]"
                           : "border-gray-200 focus:border-black focus:shadow-[2px_2px_0px_#BEF264]"
